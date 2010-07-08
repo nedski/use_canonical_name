@@ -1,0 +1,25 @@
+﻿= UseCanonicalNameModule
+
+A module to implement an Apache-style UseCanonicalName directive in IIS.
+
+= Installation
+
+TODO: Fix
+
+Drop in web app /bin directory
+
+Add to IIS
+
+= Introduction
+
+TODO: Use cases
+ 
+= Configuration
+
+TODO: Directives, setting up Web.config
+
+== Author and Copyright
+
+Written by Neil Kohl, neilk@acponline.org
+
+Copyright (c) 2010 American College of Physicians. See LICENSE for details.
