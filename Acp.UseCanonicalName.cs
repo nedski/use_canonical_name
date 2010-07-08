@@ -17,6 +17,7 @@ namespace Acp
         private bool _useCanonicalName;
         private string _canonicalServerName;
         private string _appRoot;
+        private Acp.Logger _log;
 
         public static string VERSION = "0.1";
 
@@ -36,15 +37,17 @@ namespace Acp
         {
             _canonicalServerName = String.Empty;
             _useCanonicalName = false;
+            _appRoot = "/WebSite1";
+            _log = new Acp.Logger("Application");
 
             // Create HttpApplication and HttpContext objects to access
             // request and response properties.
             HttpApplication application = r_objApplication;
             HttpContext context = application.Context;
+            
+            // _appRoot = context.Request.ApplicationPath;
 
-            _appRoot = context.Request.ApplicationPath;
-
-            LogMessageToFile("Application path is " + _appRoot);
+            _log.Debug("Application path is " + _appRoot);
 
             GetConfig();
 
@@ -60,31 +63,6 @@ namespace Acp
         }
 
 
-        // For LogMessageToFile
-        public string GetTempPath()
-        {
-            string path = System.Environment.GetEnvironmentVariable("TEMP");
-            if (!path.EndsWith("\\")) path += "\\";
-            return path;
-        }
-
-        public void LogMessageToFile(string msg)
-        {
-            System.IO.StreamWriter sw = System.IO.File.AppendText(
-                GetTempPath() + "UseCanonialNameDebug.txt");
-            try
-            {
-                string logLine = System.String.Format(
-                    "{0:G}: {1}", System.DateTime.Now, msg);
-                sw.WriteLine(logLine);
-            }
-            finally
-            {
-                sw.Close();
-            }
-        }
-
-
         //
         // private methods
         //
@@ -92,11 +70,11 @@ namespace Acp
         private void PreSendRequestHeaders(object r_objSender, EventArgs r_objEventArgs)
         {
 
-            LogMessageToFile("Beginning request handling");
+            _log.Debug("Beginning request handling");
 
             if (!_useCanonicalName)
             {
-                LogMessageToFile("Not configured, returning");
+                _log.Debug("Not configured, returning");
                 return;
             }
 
@@ -110,12 +88,12 @@ namespace Acp
 
             if (!responseIsRedirect)
             {
-                LogMessageToFile("Response is not redirect, returning");
+                _log.Debug("Response is not redirect, returning");
                 return;
             }
 
-            LogMessageToFile("Response is redirect and UseCanonical name is configured");
-            LogMessageToFile("Response headers follow:");
+            _log.Debug("Response is redirect and UseCanonical name is configured");
+            _log.Debug("Response headers follow:");
 
             string requestHost = context.Request.ServerVariables["HTTP_HOST"];
             string locationUrl = GetRedirectUrl(context);
@@ -124,15 +102,15 @@ namespace Acp
             // TODO: Test if HTTP_HOST will always match host in location header
             if (requestHost == _canonicalServerName)
             {
-                LogMessageToFile("Request host matches canonical server name" );
+                _log.Debug("Request host matches canonical server name" );
                 return;
             }
 
             string canonicalUrl = ReplaceHostInURL(locationUrl, _canonicalServerName);
             ReplaceLocationUrlInResponseHeaders(canonicalUrl, context);
 
-            LogMessageToFile("Server name is " + _canonicalServerName);
-            LogMessageToFile("Status Code is " + responseStatus);
+            _log.Debug("Server name is " + _canonicalServerName);
+            _log.Debug("Status Code is " + responseStatus);
             context.Response.AppendHeader("X-UseCanonicalName", Convert.ToString(_useCanonicalName));
             context.Response.AppendHeader("X-ServerName", _canonicalServerName);
 
@@ -144,14 +122,14 @@ namespace Acp
             {
                 context.Response.Headers.Remove("Location");
                 context.Response.Headers.Add("Location", canonicalUrl);
-                LogMessageToFile("Set Location to " + canonicalUrl);
+                _log.Debug("Set Location to " + canonicalUrl);
 
             }
             catch (PlatformNotSupportedException ex)
             {
-                LogMessageToFile("WARNING: PlatformNotSupportedException; ensure running under IIS7/.Net 3.5");
-                LogMessageToFile(ex.Message);
-                LogMessageToFile("WARNING: Can't replace Location header");
+                _log.Warn("WARNING: PlatformNotSupportedException; ensure running under IIS7/.Net 3.5");
+                _log.Warn(ex.Message);
+                _log.Warn("WARNING: Can't replace Location header");
             }
    
         }
@@ -167,14 +145,14 @@ namespace Acp
             try
             {
                 locationUrl = context.Response.Headers["Location"];
-                LogMessageToFile("Location: " + locationUrl);
+                _log.Debug("Location: " + locationUrl);
 
             }
             catch (PlatformNotSupportedException ex)
             {
-                LogMessageToFile("WARNING: PlatformNotSupportedException; ensure running under IIS7/.Net 3.5");
-                LogMessageToFile(ex.Message);
-                LogMessageToFile("WARNING: Using fake location header");
+                _log.Warn("WARNING: PlatformNotSupportedException; ensure running under IIS7/.Net 3.5");
+                _log.Warn(ex.Message);
+                _log.Warn("WARNING: Using fake location header");
             }
 
             return locationUrl;
@@ -191,22 +169,23 @@ namespace Acp
 
         private string ReplaceHostInURL(string url, string host)
         {
-            UriBuilder newUri = new UriBuilder(url);
-            newUri.Host = host;
-            if (newUri.Port == 80)
-                newUri.Port = -1; // omit port from final url
-            return newUri.ToString();
+            // UriBuilder newUri = new UriBuilder(url);
+            // newUri.Host = host;
+            // if (newUri.Port == 80)
+            //     newUri.Port = -1; // omit port from final url
+            // return newUri.ToString();
+            return url;
         }
 
         private void GetConfig()
         {
 
-            LogMessageToFile("Init: reading configuration from " + _appRoot + "/web.config");
+            _log.Debug("Init: reading configuration from " + _appRoot + "/web.config");
 
             // Assume web.config is in app root. This may be fragile; I don't know enough about
             // all the configuration permutations of IIS. Possible to not have a web.config in an app root?
             System.Configuration.Configuration rootWebConfig1 =
-                System.Web.Configuration.WebConfigurationManager.OpenWebConfiguration(_appRoot + "/web.config");
+                System.Web.Configuration.WebConfigurationManager.OpenWebConfiguration(_appRoot + "/Web.config");
 
             if (rootWebConfig1.AppSettings.Settings.Count > 0)
             {
@@ -223,17 +202,17 @@ namespace Acp
 
                     _useCanonicalName = true;
                     _canonicalServerName = serverNameConfig.Value;
-                    LogMessageToFile("Config found, server name is " + _canonicalServerName);
+                    _log.Debug("Config found, server name is " + _canonicalServerName);
                 }
                 else
                 {
-                    LogMessageToFile("No valid config found for UseCanonicalName");
+                    _log.Warn("No valid config found for UseCanonicalName");
 
                 }
             }
             else
             {
-                LogMessageToFile("Empty or non-existent web.config: rootWebConfig1.AppSettings.Settings.Count <= 0");
+                _log.Warn("Empty or non-existent web.config: rootWebConfig1.AppSettings.Settings.Count <= 0");
             }
 
         }
