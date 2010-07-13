@@ -37,14 +37,14 @@ namespace Acp
         {
             _canonicalServerName = String.Empty;
             _useCanonicalName = false;
-            _appRoot = "/WebSite1";
-            _log = new Acp.Logger("Application");
+            _appRoot = "";
+            _log = new Acp.Logger(Acp.Logger.LEVEL_DEBUG);
 
             // Create HttpApplication and HttpContext objects to access
             // request and response properties.
             HttpApplication application = r_objApplication;
             HttpContext context = application.Context;
-            
+           
             // _appRoot = context.Request.ApplicationPath;
 
             _log.Debug("Application path is " + _appRoot);
@@ -100,11 +100,16 @@ namespace Acp
 
             // If request host matches canonical host there's nothing for us to do
             // TODO: Test if HTTP_HOST will always match host in location header
+
+
             if (requestHost == _canonicalServerName)
             {
                 _log.Debug("Request host matches canonical server name" );
                 return;
             }
+
+            // TODO: Return if the server name is NOT found in the URL
+            // i.e. return if locationUrl !~ /requestHost/
 
             string canonicalUrl = ReplaceHostInURL(locationUrl, _canonicalServerName);
             ReplaceLocationUrlInResponseHeaders(canonicalUrl, context);
@@ -186,6 +191,17 @@ namespace Acp
             // all the configuration permutations of IIS. Possible to not have a web.config in an app root?
             System.Configuration.Configuration rootWebConfig1 =
                 System.Web.Configuration.WebConfigurationManager.OpenWebConfiguration(_appRoot + "/Web.config");
+
+            // Tried to use app settings, get nullObject excetption when try to iterate through config
+            //AppSettingsSection appSettings =
+            //        System.Web.Configuration.WebConfigurationManager.GetWebApplicationSection("appSettings") 
+            //        as AppSettingsSection;
+
+           // foreach (string key in appSettings.Settings.AllKeys)
+           // {
+           //     _log.Debug("appSettings: " + key + ": " + appSettings.Settings[key]);
+           // }
+
 
             if (rootWebConfig1.AppSettings.Settings.Count > 0)
             {
