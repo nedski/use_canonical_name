@@ -44,7 +44,7 @@ namespace Acp
             // request and response properties.
             HttpApplication application = r_objApplication;
             HttpContext context = application.Context;
-           
+
             // _appRoot = context.Request.ApplicationPath;
 
             _log.Debug("Application path is " + _appRoot);
@@ -93,25 +93,37 @@ namespace Acp
             }
 
             _log.Debug("Response is redirect and UseCanonical name is configured");
-            _log.Debug("Response headers follow:");
 
             string requestHost = context.Request.ServerVariables["HTTP_HOST"];
-            string locationUrl = GetRedirectUrl(context);
+            string redirectUrl = GetRedirectUrl(context);
+
 
             // If request host matches canonical host there's nothing for us to do
             // TODO: Test if HTTP_HOST will always match host in location header
 
-
             if (requestHost == _canonicalServerName)
             {
-                _log.Debug("Request host matches canonical server name" );
+                _log.Debug("PASS: Request host matches canonical server name");
                 return;
             }
 
-            // TODO: Return if the server name is NOT found in the URL
-            // i.e. return if locationUrl !~ /requestHost/
+            // In testing I've only seen relative Location headers (start with /, not http://)
+            // but let's be paranoid and check for full URLs
 
-            string canonicalUrl = ReplaceHostInURL(locationUrl, _canonicalServerName);
+            if (redirectUrl.StartsWith("http", StringComparison.CurrentCultureIgnoreCase))
+            {
+                _log.Warn("Full url in redirect: " + redirectUrl);
+                Uri redirectUri = new Uri(redirectUrl);
+                  // Return if the server name is NOT found in the URL
+                 // i.e. return if locationUrl !~ /requestHost/
+                if (redirectUri.Host != requestHost)
+                {
+                    _log.Debug("PASS: External redirect - host in request '" + requestHost + "' does not match redirect '" + redirectUri.Host + "'");
+                    return;
+                }   
+            }
+
+            string canonicalUrl = ReplaceHostInURL(redirectUrl, _canonicalServerName, context);
             ReplaceLocationUrlInResponseHeaders(canonicalUrl, context);
 
             _log.Debug("Server name is " + _canonicalServerName);
@@ -136,7 +148,7 @@ namespace Acp
                 _log.Warn(ex.Message);
                 _log.Warn("WARNING: Can't replace Location header");
             }
-   
+
         }
 
 
@@ -150,7 +162,7 @@ namespace Acp
             try
             {
                 locationUrl = context.Response.Headers["Location"];
-                _log.Debug("Location: " + locationUrl);
+                _log.Debug("URL extracted from Location header: " + locationUrl);
 
             }
             catch (PlatformNotSupportedException ex)
@@ -172,64 +184,66 @@ namespace Acp
             return false;
         }
 
-        private string ReplaceHostInURL(string url, string host)
+        private string ReplaceHostInURL(string url, string host, HttpContext context)
         {
-            // UriBuilder newUri = new UriBuilder(url);
-            // newUri.Host = host;
-            // if (newUri.Port == 80)
-            //     newUri.Port = -1; // omit port from final url
-            // return newUri.ToString();
-            return url;
-        }
-
-        private void GetConfig()
-        {
-
-            _log.Debug("Init: reading configuration from " + _appRoot + "/web.config");
-
-            // Assume web.config is in app root. This may be fragile; I don't know enough about
-            // all the configuration permutations of IIS. Possible to not have a web.config in an app root?
-            System.Configuration.Configuration rootWebConfig1 =
-                System.Web.Configuration.WebConfigurationManager.OpenWebConfiguration(_appRoot + "/Web.config");
-
-            // Tried to use app settings, get nullObject excetption when try to iterate through config
-            //AppSettingsSection appSettings =
-            //        System.Web.Configuration.WebConfigurationManager.GetWebApplicationSection("appSettings") 
-            //        as AppSettingsSection;
-
-           // foreach (string key in appSettings.Settings.AllKeys)
-           // {
-           //     _log.Debug("appSettings: " + key + ": " + appSettings.Settings[key]);
-           // }
-
-
-            if (rootWebConfig1.AppSettings.Settings.Count > 0)
+            _log.Debug("Replacing host in url: " + url);
+            if (url.StartsWith("http", StringComparison.CurrentCultureIgnoreCase))
             {
-                System.Configuration.KeyValueConfigurationElement canonicalSettingConfig =
-                    rootWebConfig1.AppSettings.Settings["UseCanonicalName"];
-
-                System.Configuration.KeyValueConfigurationElement serverNameConfig =
-                    rootWebConfig1.AppSettings.Settings["ServerName"];
-
-                if (serverNameConfig.Value != null
-                    && canonicalSettingConfig.Value != null
-                    && string.Equals(canonicalSettingConfig.Value, "On", StringComparison.CurrentCultureIgnoreCase))
-                {
-
-                    _useCanonicalName = true;
-                    _canonicalServerName = serverNameConfig.Value;
-                    _log.Debug("Config found, server name is " + _canonicalServerName);
-                }
-                else
-                {
-                    _log.Warn("No valid config found for UseCanonicalName");
-
-                }
+                return ReplaceHostInAbsoluteURL(url, host);
             }
             else
             {
-                _log.Warn("Empty or non-existent web.config: rootWebConfig1.AppSettings.Settings.Count <= 0");
+                return ReplaceHostInRelativeURL(url, host, context);
             }
+        }
+
+        private string ReplaceHostInRelativeURL(string url, string host, HttpContext context)
+        {
+            _log.Debug("Replacing host in relative url: " + url);
+            UriBuilder newUri = new UriBuilder();
+            newUri.Path = url;
+
+            if (context.Request.ServerVariables["HTTPS"].Equals("ON", StringComparison.CurrentCultureIgnoreCase))
+            {
+                newUri.Scheme = "https";
+            } 
+            else
+            {
+                newUri.Scheme = "http";
+            }
+
+            newUri.Port = Convert.ToInt32(context.Request.ServerVariables["SERVER_PORT"]);
+            newUri.Host = host;
+            if (newUri.Port == 80)
+                newUri.Port = -1; // omit port from final url
+            _log.Debug("New URL is: " + newUri.ToString());
+            return newUri.ToString();
+            //return url;
+        }
+
+
+        private string ReplaceHostInAbsoluteURL(string url, string host)
+        {
+            _log.Debug("Replacing host in absolute url: " + url);
+
+            UriBuilder newUri = new UriBuilder(url);
+            newUri.Host = host;
+            if (newUri.Port == 80)
+                 newUri.Port = -1; // omit port from final url
+            _log.Debug("New URL is: " + newUri.ToString());
+            return newUri.ToString();
+            //return url;
+        }
+
+
+        // TODO: Solve read from current application web.config problem
+        private void GetConfig()
+        {
+
+            _log.Debug("Init: setting configuration (hard-coded)");
+            _useCanonicalName = true;
+            _canonicalServerName = "www.acphospitalist.org";
+            _log.Debug("Config found, server name is " + _canonicalServerName);
 
         }
 
