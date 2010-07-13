@@ -6,36 +6,64 @@ using System.Diagnostics;
 /// </summary>
 namespace Acp
 {
-    public class Logger : ILogger
+    public class Logger
     {
 
-        private string _sourceName = String.Empty;
+        public static int LEVEL_DEBUG = 0;
+        public static int LEVEL_WARN  = 1;
+        public static int LEVEL_ERROR = 2;
 
+        private string _sourceName = "Application";
+        private int    _logLevel   = LEVEL_WARN;
+
+        public Logger()
+        {
+
+        }
         public Logger(string SourceName)
         {
            _sourceName = SourceName;
 
         }
+        
+        public Logger(int LogLevel)
+        {
+            _logLevel = LogLevel;
+
+        }
+
+        public Logger(string SourceName, int LogLevel)
+        {
+            _sourceName = SourceName;
+            _logLevel   = LogLevel;
+
+        }
         public void Debug(string text)
         {
-            EventLog.WriteEntry(_sourceName, text, EventLogEntryType.Information);
+            if (LEVEL_DEBUG >= _logLevel)
+                EventLog.WriteEntry(_sourceName, text, EventLogEntryType.Information);
         }
 
         public void Warn(string text)
         {
-            EventLog.WriteEntry(_sourceName, text, EventLogEntryType.Warning);
+            if (LEVEL_WARN >= _logLevel) 
+                EventLog.WriteEntry(_sourceName, text, EventLogEntryType.Warning);
 
         }
 
         public void Error(string text)
         {
-            EventLog.WriteEntry(_sourceName, text, EventLogEntryType.Error );
+            if (LEVEL_ERROR >= _logLevel) 
+                EventLog.WriteEntry(_sourceName, text, EventLogEntryType.Error );
         }
 
         public void Error(string text, Exception ex)
         {
-            Error(text);
-            Error(ex.StackTrace);
+            if (LEVEL_ERROR >= _logLevel)
+            {
+                Error(text);
+                Error(ex.StackTrace);
+            }
         }
     }
 }
