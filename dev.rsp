@@ -1,0 +1,4 @@
+/t:library
+/r:System.Web.dll
+/debug
+/out:UseCanonicalNameModule.dll
